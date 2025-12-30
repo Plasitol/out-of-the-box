@@ -12,6 +12,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	//need to test
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
 var (
@@ -20,11 +23,44 @@ var (
 )
 
 func main() {
-	con, err := libp2p.New()
+	con, err := libp2p.New(
+		libp2p.EnableRelay(), // relay
+		libp2p.EnableAutoRelayWithStaticRelays([]peer.AddrInfo{
+			megaparse("/ip4/147.75.80.110/tcp/4001/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb"), //add more + config add wip
+		}),
+		libp2p.EnableHolePunching(), //nat punching
+		libp2p.NATPortMap(),
+
+		//todo
+	)
 	if err != nil {
 		panic(err)
 	}
 	defer con.Close()
+
+	anoctx := context.Background()
+	kdht, err := dht.New(anoctx, con, dht.Mode(dht.ModeServer))
+	if err != nil {
+		panic(err)
+	}
+
+	if err = kdht.Bootstrap(anoctx); err != nil {
+		panic(err)
+	}
+
+	bootstrapPeers := []string{ //i stealed this
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb",
+		"/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt",
+	}
+
+	for _, addr := range bootstrapPeers {
+		peerinfo, _ := peer.AddrInfoFromString(addr)
+		if err := con.Connect(anoctx, *peerinfo); err != nil {
+			fmt.Printf("failed to connect to bootstrap %v \n", err)
+		}
+	}
 
 	setupMessageHandler(con) //i stealed this
 
@@ -72,6 +108,14 @@ func comandOP(con host.Host) {
 		}
 		fmt.Print("*")
 	}
+}
+
+func megaparse(addr string) peer.AddrInfo {
+	ai, err := peer.AddrInfoFromString(addr)
+	if err != nil {
+		panic(err)
+	}
+	return *ai
 }
 
 func connect(con host.Host, addrStr string) {
